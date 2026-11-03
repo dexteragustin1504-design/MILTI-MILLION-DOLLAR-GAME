@@ -1,0 +1,47 @@
+import fs from 'node:fs';
+import vm from 'node:vm';
+import assert from 'node:assert/strict';
+const elements = new Map(), listeners = new Map();
+function element(id) {
+ if (!elements.has(id)) elements.set(id, {style:{},classList:{add(){},remove(){}},setAttribute(){},addEventListener(event,fn){listeners.set(id+':'+event,fn)},setPointerCapture(){},innerHTML:'',textContent:''});
+ return elements.get(id);
+}
+const drawing=new Proxy({}, {get:(o,k)=>o[k]||(()=>{})});
+drawing.createRadialGradient=()=>({addColorStop(){}});
+element('game').getContext=()=>drawing;
+let cards=[];
+const sandbox={console,Math,Number,String,Array,innerWidth:360,innerHeight:640,devicePixelRatio:2,document:{getElementById:element,addEventListener(){},querySelectorAll:()=>cards=[0,1,2].map(i=>({dataset:{choice:String(i)}}))},localStorage:{getItem(){return '100'},setItem(){}},matchMedia:()=>({matches:true}),addEventListener(){},requestAnimationFrame(){}};
+vm.createContext(sandbox);
+const html=fs.readFileSync('index.html','utf8');
+const script=html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+assert.ok(script,'Game script exists');
+vm.runInContext(script,sandbox);
+vm.runInContext(`
+start();
+if(state!=='playing'||player.hp!==4||best!==100)throw Error('Start or saved score');
+dash();
+if(player.cd<=0||player.inv<=0)throw Error('Dash');
+pause(); if(state!=='paused')throw Error('Pause');
+pause();
+for(let i=0;i<60;i++)update(1/60);
+if(clock<.9||!enemies.length)throw Error('Simulation');
+gems=[];enemies=[];bullets=[];spawn=10;score=0;gems.push({x:player.x,y:player.y,value:10});update(.016);
+if(score!==10)throw Error('Energy collection');
+waveTime=25;update(.016);
+if(state!=='upgrade')throw Error('Upgrade screen');
+`,sandbox);
+cards[0].onclick();
+vm.runInContext("if(state!=='playing'||wave!==2)throw Error('Upgrade selection');",sandbox);
+listeners.get('game:pointerdown')({pointerId:1,clientX:50,clientY:400});
+listeners.get('game:pointerdown')({pointerId:2,clientX:90,clientY:450});
+vm.runInContext("if(pointer.id!==1)throw Error('Second finger stole joystick');",sandbox);
+listeners.get('game:pointerup')({pointerId:2});
+vm.runInContext("if(!pointer)throw Error('Second finger cleared joystick');",sandbox);
+listeners.get('game:pointermove')({pointerId:1,clientX:100,clientY:400});
+vm.runInContext("player.x=180;player.dash=0;const before=player.x;update(.016);if(player.x<=before)throw Error('Touch movement');",sandbox);
+listeners.get('game:pointercancel')({pointerId:1});
+vm.runInContext("if(pointer!==null)throw Error('Cancel release');end();if(state!=='over')throw Error('Game over');draw(10,.016);start();if(score!==0||wave!==1||enemies.length||aim.x!==1)throw Error('Restart');draw(11,.016);",sandbox);
+const config=JSON.parse(fs.readFileSync('capacitor.config.json','utf8'));
+assert.equal(config.webDir,'www');
+assert.ok(!config.server,'Native build must bundle offline assets');
+console.log('PASS: mobile start, save loading, dash, pause, simulation, collection, upgrade, multitouch, movement, cancellation, game over, restart, drawing, offline configuration.');
