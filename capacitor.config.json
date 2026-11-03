@@ -1,0 +1,10 @@
+{
+  "appId": "com.dexteragustin1504.lumenrun",
+  "appName": "LUMEN RUN",
+  "webDir": "www",
+  "backgroundColor": "#090b13",
+  "android": {
+    "backgroundColor": "#090b13",
+    "allowMixedContent": false
+  }
+}
